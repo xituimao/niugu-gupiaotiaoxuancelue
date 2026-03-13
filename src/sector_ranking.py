@@ -8,7 +8,7 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import akshare as ak
 import pandas as pd
@@ -91,24 +91,25 @@ def build_daily_rankings(days: int = 10, top_per_day: int = 10) -> list[dict]:
     return daily_rankings
 
 
-def score_sectors(daily_rankings: list[dict]) -> pd.DataFrame:
+def score_sectors(daily_rankings: list[dict], top_per_day: int = 10) -> pd.DataFrame:
     """
     按每日排名给板块打分并汇总，生成板块龙虎榜。
 
-    打分规则：当日排名第1名+9分，第2名+8分，……第10名+0分。
-    返回 DataFrame，包含 '板块名称' 和 '综合积分' 两列，按积分降序排列。
+    打分规则：当日排名第1名+(top_per_day-1)分，第2名+(top_per_day-2)分，……
+    最后一名+0分。默认 top_per_day=10 时，第1名+9分，第10名+0分。
+    分数基于固定排名位置，与当日实际上榜数量无关。
 
     :param daily_rankings: build_daily_rankings() 的返回值
+    :param top_per_day: 每日保留的板块数，决定第1名的基础分（默认10）
     :return: 板块龙虎榜 DataFrame
     """
     scores: dict[str, int] = {}
 
     for day in daily_rankings:
         sectors = day["sectors"]  # 已按净入资金从高到低排列
-        top_n = len(sectors)
         for rank_idx, sector in enumerate(sectors):
-            # rank_idx=0 → 第1名 → 得 (top_n-1) 分；最后一名得 0 分
-            score = top_n - 1 - rank_idx
+            # 第1名(rank_idx=0)得 top_per_day-1 分；最后一名得0分；最多取非负值
+            score = max(0, top_per_day - 1 - rank_idx)
             scores[sector] = scores.get(sector, 0) + score
 
     result = pd.DataFrame(
@@ -134,4 +135,4 @@ def get_sector_dragon_tiger_list(
     daily_rankings = build_daily_rankings(days=days, top_per_day=top_per_day)
     if not daily_rankings:
         return pd.DataFrame(columns=["板块名称", "综合积分"])
-    return score_sectors(daily_rankings)
+    return score_sectors(daily_rankings, top_per_day=top_per_day)

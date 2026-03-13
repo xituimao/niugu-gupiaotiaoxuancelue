@@ -73,8 +73,8 @@ def _format_markdown(
                 lines.append(f"| {code} | {name} | {price} | {gain} |")
             lines.append("")
 
-    lines.append(f"---")
-    lines.append(f"*生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+    lines.append("---")
+    lines.append(f"*生成时间：{date.strftime('%Y-%m-%d %H:%M:%S')}*")
     return "\n".join(lines)
 
 
@@ -83,7 +83,7 @@ def _format_csv(selected_stocks: pd.DataFrame) -> str:
     if selected_stocks.empty:
         return ""
     cols = [c for c in ["板块", "代码", "名称", "最新价", "5日涨跌幅"] if c in selected_stocks.columns]
-    return selected_stocks[cols].to_csv(index=False, encoding="utf-8-sig")
+    return selected_stocks[cols].to_csv(index=False)
 
 
 def save_report(

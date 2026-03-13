@@ -7,6 +7,7 @@
 3. 从前15中取涨幅最小的5个，再按最新价升序取最低的3个——每个板块获取3只个股。
 """
 
+import functools
 import logging
 
 import akshare as ak
@@ -14,27 +15,30 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-_five_day_gains_cache: pd.DataFrame | None = None
+
+@functools.lru_cache(maxsize=1)
+def _fetch_five_day_gains() -> pd.DataFrame:
+    """
+    从东方财富获取全市场5日涨跌幅数据（进程级 LRU 缓存，只拉取一次）。
+
+    缓存可通过 _fetch_five_day_gains.cache_clear() 重置。
+    """
+    logger.info("正在获取全市场5日涨跌幅数据...")
+    df = ak.stock_individual_fund_flow_rank(indicator="5日")
+    df = df[["代码", "名称", "最新价", "5日涨跌幅"]].copy()
+    df["5日涨跌幅"] = pd.to_numeric(df["5日涨跌幅"], errors="coerce")
+    df["最新价"] = pd.to_numeric(df["最新价"], errors="coerce")
+    return df
 
 
 def get_five_day_gains() -> pd.DataFrame:
     """
-    获取全市场所有A股的5日涨跌幅数据（带缓存，同次运行只拉取一次）。
+    获取全市场所有A股的5日涨跌幅数据（带进程级缓存，同次运行只拉取一次）。
 
-    返回 DataFrame，包含 '代码' 和 '5日涨跌幅' 两列。
+    返回 DataFrame，包含 '代码'、'名称'、'最新价' 和 '5日涨跌幅' 列。
     """
-    global _five_day_gains_cache
-    if _five_day_gains_cache is not None:
-        return _five_day_gains_cache
-
-    logger.info("正在获取全市场5日涨跌幅数据...")
     try:
-        df = ak.stock_individual_fund_flow_rank(indicator="5日")
-        df = df[["代码", "名称", "最新价", "5日涨跌幅"]].copy()
-        df["5日涨跌幅"] = pd.to_numeric(df["5日涨跌幅"], errors="coerce")
-        df["最新价"] = pd.to_numeric(df["最新价"], errors="coerce")
-        _five_day_gains_cache = df
-        return df
+        return _fetch_five_day_gains()
     except Exception as exc:
         logger.warning("获取5日涨跌幅数据失败: %s", exc)
         return pd.DataFrame(columns=["代码", "名称", "最新价", "5日涨跌幅"])

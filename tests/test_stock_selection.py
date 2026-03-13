@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.sector_ranking import (
     get_recent_trading_dates,
     score_sectors,
-    build_daily_rankings,
 )
 from src.stock_selector import select_stocks_for_sector, get_selected_stocks
 from src.report_generator import (
@@ -55,7 +54,7 @@ def make_sector_dragon_tiger():
     )
 
 
-def make_constituent_stocks(sector_name="板块1"):
+def make_constituent_stocks():
     """生成测试用的成分股 DataFrame（模拟 stock_board_industry_cons_em 返回值）。"""
     return pd.DataFrame(
         {
@@ -102,21 +101,31 @@ class TestScoreSectors:
             {"date": datetime(2024, 1, 1), "sectors": ["A", "B", "C"]},
             {"date": datetime(2024, 1, 2), "sectors": ["A", "C", "B"]},
         ]
-        result = score_sectors(rankings)
+        result = score_sectors(rankings, top_per_day=3)
         # A 每次第1名(+2分)×2 = 4分，B 第2名(+1)+第3名(+0)=1分，C 第3名+第2名=1分
         assert result.iloc[0]["板块名称"] == "A"
         assert result.iloc[0]["综合积分"] == 4
 
     def test_top_n_minus_one_scoring(self):
-        """验证打分规则：第1名得(N-1)分，最后一名得0分。"""
+        """验证打分规则：第1名得(top_per_day-1)分，最后一名得0分。"""
         rankings = [
             {"date": datetime(2024, 1, 1), "sectors": ["X", "Y", "Z"]},
         ]
-        result = score_sectors(rankings)
+        result = score_sectors(rankings, top_per_day=3)
         scores = dict(zip(result["板块名称"], result["综合积分"]))
-        assert scores["X"] == 2  # top_n=3, rank_idx=0 → 3-1-0 = 2
+        assert scores["X"] == 2  # top_per_day=3, rank_idx=0 → 3-1-0 = 2
         assert scores["Y"] == 1  # rank_idx=1 → 3-1-1 = 1
         assert scores["Z"] == 0  # rank_idx=2 → 3-1-2 = 0
+
+    def test_fixed_scoring_based_on_top_per_day(self):
+        """当某日实际上榜数少于 top_per_day 时，第1名仍按 top_per_day 计分。"""
+        rankings = [
+            {"date": datetime(2024, 1, 1), "sectors": ["A", "B"]},  # 仅2个，非10个
+        ]
+        result = score_sectors(rankings, top_per_day=10)
+        scores = dict(zip(result["板块名称"], result["综合积分"]))
+        assert scores["A"] == 9  # 第1名始终得 top_per_day-1 = 9 分
+        assert scores["B"] == 8  # 第2名得 8 分
 
     def test_empty_rankings_returns_empty_df(self):
         result = score_sectors([])
@@ -166,9 +175,6 @@ class TestSelectStocksForSector:
     def test_returns_at_most_final_count(self, mock_cons, mock_gains):
         mock_cons.return_value = make_constituent_stocks()
         mock_gains.return_value = make_five_day_gains()
-        # Reset module-level cache
-        import src.stock_selector as ss
-        ss._five_day_gains_cache = None
 
         result = select_stocks_for_sector("板块1")
         assert len(result) <= 3
@@ -178,8 +184,6 @@ class TestSelectStocksForSector:
     def test_result_has_sector_column(self, mock_cons, mock_gains):
         mock_cons.return_value = make_constituent_stocks()
         mock_gains.return_value = make_five_day_gains()
-        import src.stock_selector as ss
-        ss._five_day_gains_cache = None
 
         result = select_stocks_for_sector("测试板块")
         assert "板块" in result.columns
@@ -191,8 +195,6 @@ class TestSelectStocksForSector:
         """验证从候选池中选出的是价格最低的3只。"""
         mock_cons.return_value = make_constituent_stocks()
         mock_gains.return_value = make_five_day_gains()
-        import src.stock_selector as ss
-        ss._five_day_gains_cache = None
 
         result = select_stocks_for_sector("板块1")
         if len(result) >= 2:
@@ -204,8 +206,6 @@ class TestSelectStocksForSector:
     def test_empty_constituent_returns_empty(self, mock_cons, mock_gains):
         mock_cons.return_value = pd.DataFrame(columns=["代码", "名称", "最新价"])
         mock_gains.return_value = make_five_day_gains()
-        import src.stock_selector as ss
-        ss._five_day_gains_cache = None
 
         result = select_stocks_for_sector("空板块")
         assert result.empty
@@ -215,8 +215,6 @@ class TestSelectStocksForSector:
     def test_get_selected_stocks_combines_sectors(self, mock_cons, mock_gains):
         mock_cons.return_value = make_constituent_stocks()
         mock_gains.return_value = make_five_day_gains()
-        import src.stock_selector as ss
-        ss._five_day_gains_cache = None
 
         dragon_tiger = make_sector_dragon_tiger()
         result = get_selected_stocks(dragon_tiger, top_sectors=3)

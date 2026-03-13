@@ -68,6 +68,37 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
+## GitHub Actions 自动化
+
+本项目配置了 GitHub Actions 工作流，可以每天自动运行选股程序并通过邮件发送报告。
+
+### 功能特性
+
+- **定时运行**：每天北京时间 14:00 自动执行
+- **邮件通知**：自动将报告发送到指定邮箱
+- **报告存档**：在 GitHub Actions 中保留 30 天的报告工件
+- **手动触发**：支持在 GitHub Actions 页面手动运行
+
+### 配置步骤
+
+1. **设置邮件密码 Secret**
+   - 进入仓库的 **Settings** → **Secrets and variables** → **Actions**
+   - 点击 **New repository secret**
+   - 添加 Secret：
+     - Name: `EMAIL_PASSWORD`
+     - Secret: 邮箱授权密码
+
+2. **查看工作流**
+   - 工作流配置文件：`.github/workflows/daily-stock-report.yml`
+   - 详细文档：`.github/workflows/README.md`
+
+3. **手动运行**
+   - 进入仓库的 **Actions** 页面
+   - 选择 **每日牛股选股报告** 工作流
+   - 点击 **Run workflow** 按钮
+
+更多配置详情请参考 [GitHub Actions 工作流文档](.github/workflows/README.md)。
+
 ## 数据来源
 
 数据通过 [akshare](https://akshare.akfamily.xyz/) 从东方财富网获取：

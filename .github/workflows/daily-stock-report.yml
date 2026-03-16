@@ -83,7 +83,6 @@ jobs:
           运行时间: ${{ github.event.repository.updated_at }}
           工作流: ${{ github.workflow }}
         attachments: ${{ steps.get_report.outputs.report_exists == 'true' && format('{0}/stocks.csv', steps.get_report.outputs.report_dir) || '' }}
-        content_type: text/plain
         convert_markdown: true
 
     - name: 上传报告为工件

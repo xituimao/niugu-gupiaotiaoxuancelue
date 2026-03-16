@@ -46,7 +46,7 @@ def retry_on_exception(
                     if attempt < max_retries:
                         logger.warning(
                             "函数 %s 执行失败 (尝试 %d/%d): %s，将在 %.1f 秒后重试...",
-                            func.__name__,
+                            getattr(func, "__name__", "unknown"),
                             attempt + 1,
                             max_retries + 1,
                             exc,
@@ -57,7 +57,7 @@ def retry_on_exception(
                     else:
                         logger.error(
                             "函数 %s 执行失败，已达最大重试次数 %d: %s",
-                            func.__name__,
+                            getattr(func, "__name__", "unknown"),
                             max_retries + 1,
                             exc,
                         )
@@ -67,7 +67,9 @@ def retry_on_exception(
                 raise last_exception
 
             # 理论上不会到达这里，但为了类型检查
-            raise RuntimeError(f"函数 {func.__name__} 未能成功执行且未捕获异常")
+            raise RuntimeError(
+                f"函数 {getattr(func, '__name__', 'unknown')} 未能成功执行且未捕获异常"
+            )
 
         return wrapper
 
@@ -109,7 +111,7 @@ def retry_with_fallback(
             if attempt < max_retries:
                 logger.warning(
                     "函数 %s 执行失败 (尝试 %d/%d): %s，将在 %.1f 秒后重试...",
-                    func.__name__,
+                    getattr(func, "__name__", "unknown"),
                     attempt + 1,
                     max_retries + 1,
                     exc,
@@ -120,7 +122,7 @@ def retry_with_fallback(
             else:
                 logger.error(
                     "函数 %s 执行失败，已达最大重试次数 %d: %s，返回fallback值",
-                    func.__name__,
+                    getattr(func, "__name__", "unknown"),
                     max_retries + 1,
                     exc,
                 )

@@ -13,13 +13,16 @@ import logging
 import akshare as ak
 import pandas as pd
 
+from src.retry_utils import retry_on_exception
+
 logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache(maxsize=1)
+@retry_on_exception(max_retries=3, backoff_factor=2.0, initial_delay=1.0)
 def _fetch_five_day_gains() -> pd.DataFrame:
     """
-    从东方财富获取全市场5日涨跌幅数据（进程级 LRU 缓存，只拉取一次）。
+    从东方财富获取全市场5日涨跌幅数据（进程级 LRU 缓存，只拉取一次，带重试机制）。
 
     缓存可通过 _fetch_five_day_gains.cache_clear() 重置。
     """
@@ -33,29 +36,33 @@ def _fetch_five_day_gains() -> pd.DataFrame:
 
 def get_five_day_gains() -> pd.DataFrame:
     """
-    获取全市场所有A股的5日涨跌幅数据（带进程级缓存，同次运行只拉取一次）。
+    获取全市场所有A股的5日涨跌幅数据（带进程级缓存和重试机制，同次运行只拉取一次）。
 
     返回 DataFrame，包含 '代码'、'名称'、'最新价' 和 '5日涨跌幅' 列。
     """
     try:
         return _fetch_five_day_gains()
     except Exception as exc:
-        logger.warning("获取5日涨跌幅数据失败: %s", exc)
+        logger.warning("获取5日涨跌幅数据失败（已重试）: %s", exc)
         return pd.DataFrame(columns=["代码", "名称", "最新价", "5日涨跌幅"])
 
 
 def get_sector_constituent_stocks(sector_name: str) -> pd.DataFrame:
     """
-    获取指定行业板块的成分股列表。
+    获取指定行业板块的成分股列表（带重试机制）。
 
     返回包含 '代码'、'名称'、'最新价' 等字段的 DataFrame。
     """
-    try:
+    @retry_on_exception(max_retries=3, backoff_factor=2.0, initial_delay=1.0)
+    def _fetch() -> pd.DataFrame:
         df = ak.stock_board_industry_cons_em(symbol=sector_name)
         df["最新价"] = pd.to_numeric(df["最新价"], errors="coerce")
         return df
+
+    try:
+        return _fetch()
     except Exception as exc:
-        logger.warning("获取板块 %s 成分股失败: %s", sector_name, exc)
+        logger.warning("获取板块 %s 成分股失败（已重试）: %s", sector_name, exc)
         return pd.DataFrame(columns=["代码", "名称", "最新价"])
 
 

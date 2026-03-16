@@ -1,0 +1,97 @@
+name: 每日牛股选股报告
+
+on:
+  schedule:
+    # 每天北京时间14:00运行 (UTC时间06:00)
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  generate-and-send-report:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: 安装依赖
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 运行选股程序
+      id: run_selection
+      run: |
+        python main.py > output.log 2>&1
+        echo "exit_code=$?" >> $GITHUB_OUTPUT
+      continue-on-error: true
+
+    - name: 获取报告文件
+      id: get_report
+      run: |
+        # 获取今天的日期
+        TODAY=$(date +%Y-%m-%d)
+        REPORT_DIR="report/${TODAY}"
+
+        # 检查报告目录是否存在
+        if [ -d "$REPORT_DIR" ]; then
+          echo "report_exists=true" >> $GITHUB_OUTPUT
+          echo "report_dir=${REPORT_DIR}" >> $GITHUB_OUTPUT
+
+          # 读取报告内容
+          if [ -f "${REPORT_DIR}/report.md" ]; then
+            echo "REPORT_CONTENT<<EOF" >> $GITHUB_ENV
+            cat "${REPORT_DIR}/report.md" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "report_exists=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "report_exists=false" >> $GITHUB_OUTPUT
+          echo "REPORT_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "## 报告生成失败" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+          echo "运行日志：" >> $GITHUB_ENV
+          echo "\`\`\`" >> $GITHUB_ENV
+          cat output.log >> $GITHUB_ENV
+          echo "\`\`\`" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        fi
+
+    - name: 发送邮件报告
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.yeah.net
+        server_port: 465
+        secure: true
+        username: aistockreport@yeah.net
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: 牛股选股日报 - ${{ github.run_id }}
+        to: sx3964117@126.com
+        from: aistockreport@yeah.net
+        body: |
+          ${{ env.REPORT_CONTENT }}
+
+          ---
+          此邮件由 GitHub Actions 自动生成
+          运行时间: ${{ github.event.repository.updated_at }}
+          工作流: ${{ github.workflow }}
+        attachments: ${{ steps.get_report.outputs.report_exists == 'true' && format('{0}/stocks.csv', steps.get_report.outputs.report_dir) || '' }}
+        content_type: text/plain
+        convert_markdown: true
+
+    - name: 上传报告为工件
+      if: steps.get_report.outputs.report_exists == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: stock-report-${{ github.run_id }}
+        path: |
+          ${{ steps.get_report.outputs.report_dir }}/report.md
+          ${{ steps.get_report.outputs.report_dir }}/stocks.csv
+        retention-days: 30

@@ -13,28 +13,35 @@ from datetime import datetime
 import akshare as ak
 import pandas as pd
 
+from src.retry_utils import retry_on_exception
+
 logger = logging.getLogger(__name__)
 
 
+@retry_on_exception(max_retries=3, backoff_factor=2.0, initial_delay=1.0)
 def get_all_sector_names() -> list[str]:
-    """获取所有行业板块名称列表。"""
+    """获取所有行业板块名称列表（带重试机制）。"""
     df = ak.stock_board_industry_name_em()
     return df["板块名称"].tolist()
 
 
 def get_sector_historical_flows(sector_name: str) -> pd.DataFrame:
     """
-    获取指定行业板块的历史每日主力净流入数据。
+    获取指定行业板块的历史每日主力净流入数据（带重试机制）。
 
     返回 DataFrame，包含 '日期' 和 '主力净流入-净额' 两列。
     """
-    try:
+    @retry_on_exception(max_retries=3, backoff_factor=2.0, initial_delay=1.0)
+    def _fetch() -> pd.DataFrame:
         df = ak.stock_sector_fund_flow_hist(symbol=sector_name)
         df["日期"] = pd.to_datetime(df["日期"])
         df["主力净流入-净额"] = pd.to_numeric(df["主力净流入-净额"], errors="coerce")
         return df[["日期", "主力净流入-净额"]].dropna()
+
+    try:
+        return _fetch()
     except Exception as exc:
-        logger.warning("获取板块 %s 历史资金流数据失败: %s", sector_name, exc)
+        logger.warning("获取板块 %s 历史资金流数据失败（已重试）: %s", sector_name, exc)
         return pd.DataFrame(columns=["日期", "主力净流入-净额"])
 
 

@@ -8,6 +8,34 @@
   3. 将结果保存到 report/YYYY-MM-DD/ 目录
 """
 
+# 在导入 akshare 之前为 requests.Session 补丁，确保所有 HTTP 请求携带浏览器风格的
+# 请求头。akshare 的 request_with_retry 工具函数创建 requests.Session 时未设置
+# User-Agent，导致东方财富 API 的编号子域名（如 17.push2.eastmoney.com、
+# 29.push2.eastmoney.com）以 RemoteDisconnected 关闭连接。此脚本仅用于股票数据
+# 采集，对所有会话统一注入请求头是修复各 akshare 函数问题的最简可靠方案。
+import requests as _requests
+
+_orig_session_init = _requests.Session.__init__
+
+
+def _patched_session_init(self, *args, **kwargs):
+    _orig_session_init(self, *args, **kwargs)
+    self.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Referer": "https://data.eastmoney.com/",
+        }
+    )
+
+
+_requests.Session.__init__ = _patched_session_init
+
 import logging
 import sys
 from datetime import datetime

@@ -39,6 +39,9 @@ jobs:
         TODAY=$(date +%Y-%m-%d)
         REPORT_DIR="report/${TODAY}"
 
+        # 使用唯一分隔符，避免报告内容/日志中出现 EOF 导致 $GITHUB_ENV 解析失败
+        DELIM="REPORT_CONTENT_$(date +%s%N)"
+
         # 检查报告目录是否存在
         if [ -d "$REPORT_DIR" ]; then
           echo "report_exists=true" >> $GITHUB_OUTPUT
@@ -46,22 +49,22 @@ jobs:
 
           # 读取报告内容
           if [ -f "${REPORT_DIR}/report.md" ]; then
-            echo "REPORT_CONTENT<<EOF" >> $GITHUB_ENV
+            echo "REPORT_CONTENT<<$DELIM" >> $GITHUB_ENV
             cat "${REPORT_DIR}/report.md" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            echo "$DELIM" >> $GITHUB_ENV
           else
             echo "report_exists=false" >> $GITHUB_OUTPUT
           fi
         else
           echo "report_exists=false" >> $GITHUB_OUTPUT
-          echo "REPORT_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "REPORT_CONTENT<<$DELIM" >> $GITHUB_ENV
           echo "## 报告生成失败" >> $GITHUB_ENV
           echo "" >> $GITHUB_ENV
           echo "运行日志：" >> $GITHUB_ENV
           echo "\`\`\`" >> $GITHUB_ENV
           cat output.log >> $GITHUB_ENV
           echo "\`\`\`" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "$DELIM" >> $GITHUB_ENV
         fi
 
     - name: 发送邮件报告
